@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>ChaskiTrufi-Conductor</title>
+    <link rel="icon" href="imagenes/CHASKITRUFIlog2.png">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="conductor.css">
+</head>
+<body>
+    <div id="inicio">
+        <img src="imagenes/CHASKITRUFI-logo1.png" alt="">
+        <h2>CONDUCTOR</h2>
+    </div>
+    <div id="info"></div>
+    <div id="panel">
+        <h3>Estás compartiendo ubicación...</h3>
+        <div id="map" style="height: 400px;"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDe0SAUeg_DOhC2D1fIq2-ZZUhh4_yCSvk",
+            authDomain: "chaskitrufi-72d1c.firebaseapp.com",
+            databaseURL: "https://chaskitrufi-72d1c-default-rtdb.firebaseio.com",
+            projectId: "chaskitrufi-72d1c",
+            storageBucket: "chaskitrufi-72d1c.appspot.com",
+            messagingSenderId: "997912993962",
+            appId: "1:997912993962:web:4937dcf165fcc35306f0d3"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const conductor = JSON.parse(localStorage.getItem('conductorActual'));
+
+        if (!conductor) {
+            alert('Datos del conductor no encontrados. Inicie sesión correctamente.');
+            window.location.href = 'index.html';
+        }
+
+        document.getElementById('info').innerHTML = `
+            <p><strong>Nombre:</strong> ${conductor.nombre} ${conductor.apellido}<br>
+            <strong>Línea:</strong> ${conductor.nombre_linea}</p>
+        `;
+
+        let map = L.map('map').setView([-17.3926, -66.1569], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const iconoAuto = L.icon({
+            iconUrl: 'imagenes/auto.png',
+            iconSize: [40, 40],
+            iconAnchor: [20, 40],
+            popupAnchor: [0, -40]
+        });
+
+        let trufiMarker = null;
+        let lastLocation = null;  // Para almacenar la última ubicación
+        let lastTimestamp = null; // Para almacenar el último timestamp
+
+        
+
+    function calcularDistancia(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Radio de la Tierra en km
+        const dLat = (lat2 - lat1) * (Math.PI / 180);
+        const dLon = (lon2 - lon1) * (Math.PI / 180);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distancia = R * c; // Distancia en kilómetros
+        return distancia;
+    }
+
+   
+    function calcularVelocidad(distancia, tiempo) {
+        const velocidad = distancia / (tiempo / 3600); // Velocidad en km/h
+        return velocidad;
+    }
+
+    function actualizarUbicacion(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const timestamp = Date.now(); // Milisegundos desde 1970
+
+        const linea = conductor.nombre_linea;
+        const id = `${conductor.nombre}_${linea}`;
+
+        // Si ya tenemos una ubicación anterior, calculamos la velocidad
+        if (lastLocation && lastTimestamp) {
+            const distancia = calcularDistancia(lastLocation.lat, lastLocation.lng, lat, lng);
+            const tiempo = (timestamp - lastTimestamp) / 1000; // Tiempo en segundos
+            const velocidad = calcularVelocidad(distancia, tiempo);
+
+            const data = {
+                lat: lat,
+                lng: lng,
+                timestamp: timestamp,
+                velocidad: velocidad // Guardamos la velocidad
+            };
+
+            set(ref(db, 'ubicaciones_conductores/' + linea + '/' + id), data)
+                .then(() => console.log('Ubicación y velocidad guardadas'))
+                .catch((error) => console.error('Error al guardar ubicación y velocidad:', error));
+        } else {
+            // Si no tenemos una ubicación anterior, solo guardamos la ubicación
+            const data = {
+                lat: lat,
+                lng: lng,
+                timestamp: timestamp
+            };
+
+            set(ref(db, 'ubicaciones_conductores/' + linea + '/' + id), data)
+                .then(() => console.log('Ubicación guardada'))
+                .catch((error) => console.error('Error al guardar ubicación:', error));
+        }
+
+        lastLocation = { lat: lat, lng: lng }; // Guardamos la ubicación actual como la última
+        lastTimestamp = timestamp; // Guardamos el timestamp actual como el último
+
+        if (trufiMarker) {
+            trufiMarker.setLatLng([lat, lng]);
+        } else {
+            trufiMarker = L.marker([lat, lng], { icon: iconoAuto }).addTo(map).bindPopup('Mi ubicación actual');
+        }
+
+        map.setView([lat, lng], 15);
+    }
+
+        function iniciarActualizacionContinua() {
+            if (navigator.geolocation) {
+                setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(
+                        actualizarUbicacion,
+                        error => console.error('Error al obtener ubicación:', error),
+                        { enableHighAccuracy: true }
+                    );
+                }, 5000);
+            } else {
+                alert('Geolocalización no soportada por este navegador.');
+            }
+        }
+
+        iniciarActualizacionContinua();
+    </script>
+</body>
+</html>

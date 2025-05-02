@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChaskiTrufi</title>
+  <link rel="stylesheet" href="index.css">
+  <link rel="icon" href="imagenes/CHASKITRUFIlog2.png">
+</head>
+<body>
+  <!-- SECCION I N I C I O -->
+  <section id="inicio">
+    <div class="contenido">
+      <img src="imagenes/CHASKITRUFI-logo1.png" alt="">
+
+        <div class="presentacion">
+            <p class="bienvenida">Bienvenid@ a Chaski Trufi</p>
+            <div>
+               <button onclick="seleccionarRol('pasajero')">Soy Pasajero</button>
+                <button onclick="seleccionarRol('conductor')">Soy Conductor</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+  <div id="formulario" style="display: none;">
+    <h3 id="titulo-form"></h3>
+
+    <input type="text" id="nombre" placeholder="Nombre"><br><br>
+    <input type="text" id="apellido" placeholder="Apellido"><br><br>
+    <input type="password" id="contrasena" placeholder="Contraseña"><br><br>
+    <input type="password" id="confirmar_contrasena" placeholder="Confirmar Contraseña"><br><br>
+
+    <div id="extras-conductor" style="display: none;">
+      <input type="text" id="codigo_linea" placeholder="Código de Línea"><br><br>
+      <input type="text" id="nombre_linea" placeholder="Nombre de Línea"><br><br>
+    </div>
+
+    <button onclick="registrarse()">Registrarse</button>
+    <p>¿Ya tienes cuenta? <a href="#" onclick="mostrarLogin()">Iniciar sesión</a></p>
+  </div>
+
+  <div id="login" style="display: none;">
+    <h3>Iniciar Sesión</h3>
+    <input type="text" id="login_nombre" placeholder="Nombre"><br><br>
+    <input type="password" id="login_contrasena" placeholder="Contraseña"><br><br>
+    <button onclick="iniciarSesion()">Ingresar</button>
+    <p>¿No tienes cuenta? <a href="#" onclick="mostrarRegistro()">Regístrate</a></p>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDe0SAUeg_DOhC2D1fIq2-ZZUhh4_yCSvk",
+      authDomain: "chaskitrufi-72d1c.firebaseapp.com",
+      databaseURL: "https://chaskitrufi-72d1c-default-rtdb.firebaseio.com",
+      projectId: "chaskitrufi-72d1c",
+      storageBucket: "chaskitrufi-72d1c.appspot.com",
+      messagingSenderId: "997912993962",
+      appId: "1:997912993962:web:4937dcf165fcc35306f0d3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let rolSeleccionado = null;
+
+    window.seleccionarRol = function(rol) {
+      rolSeleccionado = rol;
+      document.getElementById('inicio').style.display = 'none';
+      mostrarRegistro();
+      document.getElementById('titulo-form').innerText = rol === 'pasajero' ? 'Registro de Pasajero' : 'Registro de Conductor';
+      document.getElementById('extras-conductor').style.display = rol === 'conductor' ? 'block' : 'none';
+    }
+
+    window.mostrarRegistro = function() {
+      document.getElementById('formulario').style.display = 'block';
+      document.getElementById('login').style.display = 'none';
+    }
+
+    window.mostrarLogin = function() {
+      document.getElementById('formulario').style.display = 'none';
+      document.getElementById('login').style.display = 'block';
+    }
+
+    window.registrarse = async function() {
+      const nombre = document.getElementById('nombre').value.trim();
+      const apellido = document.getElementById('apellido').value.trim();
+      const contrasena = document.getElementById('contrasena').value;
+      const confirmar = document.getElementById('confirmar_contrasena').value;
+
+      if (!nombre || !apellido || !contrasena || !confirmar) {
+        alert('Completa todos los campos.');
+        return;
+      }
+      if (contrasena !== confirmar) {
+        alert('Las contraseñas no coinciden.');
+        return;
+      }
+
+      if (rolSeleccionado === 'pasajero') {
+        await set(ref(db, 'pasajeros/' + nombre), {
+          nombre,
+          apellido,
+          contrasena
+        });
+        alert('Registro exitoso como pasajero');
+        window.location.href = 'pasajero.html';
+      } else {
+        const codigo = document.getElementById('codigo_linea').value.trim();
+        const linea = document.getElementById('nombre_linea').value.trim();
+
+        const codigosValidos = {
+          "120": "120",
+          "112": "112",
+          "134": "134",
+          "130":"130"
+        };
+
+        if (!codigo || !linea) {
+          alert('Completa todos los campos del conductor.');
+          return;
+        }
+
+        if (codigosValidos[linea] !== codigo) {
+          alert('Código de línea incorrecto para la línea ingresada.');
+          return;
+        }
+
+        await set(ref(db, 'conductores/' + nombre), {
+          nombre,
+          apellido,
+          contrasena,
+          codigo_linea: codigo,
+          nombre_linea: linea
+        });
+// Guardar todos los datos del conductor en un solo objeto
+const conductor = {
+  nombre,
+  apellido,
+  contrasena,
+  codigo_linea: codigo,
+  nombre_linea: linea
+};
+
+// Guardar el objeto completo en localStorage
+localStorage.setItem('conductorActual', JSON.stringify(conductor));
+
+alert('Registro exitoso como conductor');
+window.location.href = 'conductor.html';
+}
+}
+
+    window.iniciarSesion = async function() {
+      const nombre = document.getElementById('login_nombre').value.trim();
+      const contrasena = document.getElementById('login_contrasena').value;
+
+      if (!nombre || !contrasena) {
+        alert('Completa los campos.');
+        return;
+      }
+
+      // Intentar buscar primero en conductores
+      let snapshot = await get(ref(db, 'conductores/' + nombre));
+      if (snapshot.exists()) {
+        const datos = snapshot.val();
+        if (datos.contrasena !== contrasena) {
+          alert('Contraseña incorrecta.');
+          return;
+        }
+// Guardar el objeto completo del conductor en localStorage
+const conductor = {
+  nombre: datos.nombre,
+  apellido: datos.apellido,
+  contrasena: datos.contrasena,
+  codigo_linea: datos.codigo_linea,
+  nombre_linea: datos.nombre_linea
+};
+
+localStorage.setItem('conductorActual', JSON.stringify(conductor));
+
+alert('Inicio de sesión exitoso (conductor).');
+window.location.href = 'conductor.html';
+return;
+}
+
+      // Si no es conductor, probar como pasajero
+      snapshot = await get(ref(db, 'pasajeros/' + nombre));
+      if (!snapshot.exists()) {
+        alert('Usuario no registrado.');
+        return;
+      }
+
+      const datos = snapshot.val();
+      if (datos.contrasena !== contrasena) {
+        alert('Contraseña incorrecta.');
+        return;
+      }
+
+      localStorage.setItem('rol', 'pasajero');
+
+      alert('Inicio de sesión exitoso (pasajero).');
+      window.location.href = 'pasajero.html';
+    }
+  </script>
+</body>
+</html>
