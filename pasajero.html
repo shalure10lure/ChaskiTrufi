@@ -65,6 +65,7 @@
     <div id="map" style="height: 400px;"></div>
 </div>
 <script>
+    // Configuración de Firebase para la aplicación
     const firebaseConfig = {
       apiKey: "AIzaSyDe0SAUeg_DOhC2D1fIq2-ZZUhh4_yCSvk",
       authDomain: "chaskitrufi-72d1c.firebaseapp.com",
@@ -75,8 +76,8 @@
       appId: "1:997912993962:web:4937dcf165fcc35306f0d3"
     };
   
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    firebase.initializeApp(firebaseConfig);// Inicializa Firebase
+    const db = firebase.database();        // Referencia a la base de datos
   
     const apiKey = '5b3ce3597851110001cf624839347337dfc44426862f6a2f1882933a';
   
@@ -85,21 +86,21 @@
     
     let marker = null;
     let userPosition = null;
-     // Defínelo al inicio de tu script, junto al resto de constantes:
-     const carIcon = L.icon({
+     
+    const carIcon = L.icon({
         iconUrl: 'imagenes/auto.png',      // la ruta a tu imagen
         iconSize:   [40, 40],            // tamaño en píxeles
         iconAnchor: [20, 40],            // punto del icono que corresponde a la posición geográfica
         popupAnchor: [0, -40]            // dónde sale el popup respecto al icono
     });
     const personIcon = L.icon({
-        iconUrl: 'imagenes/pasajero.png',  // ruta a tu imagen de persona
+        iconUrl: 'imagenes/pasajero.png', 
         iconSize:   [32, 32],          // ajústalo al tamaño que quieras
         iconAnchor: [16, 32],          // el punto inferior centro
         popupAnchor: [0, -32]          // popup justo arriba del icono
       });
-  
-    
+
+    // Inicializa el mapa centrado en Cochabamba y ubica al usuario si tiene activada la geolocalización
     function inicializarMapa() {
       map = L.map('map').setView([-17.3926, -66.1569], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -120,7 +121,7 @@
         console.error('Geolocalización no disponible.');
       }
     }
-  
+    // Muestra u oculta secciones según el tipo seleccionado por el usuario (rutas o ubicación)
     function seleccionarTipo(tipo) {
       document.getElementById('seccion1').style.display = 'none';
       document.getElementById('secrutas').style.display = 'none';
@@ -132,7 +133,7 @@
         document.getElementById('secubicar').style.display = 'block';
       }
     }
-  
+    // Limpia el mapa y vuelve a la pantalla de inicio
     function volverInicio() {
       clearInterval(intervaloMovimiento);
       if (trufiMarker) map.removeLayer(trufiMarker);
@@ -142,12 +143,12 @@
       document.getElementById('secrutas').style.display = 'none';
       document.getElementById('secubicar').style.display = 'none';
     }
-  
+    // Llama a la función para consultar una ruta seleccionada por el usuario (sin ubicar trufi)
     function consultarRuta() {
       const rutaSeleccionada = document.getElementById("ruta1").value;
       obtenerRuta(rutaSeleccionada, false);
     }
-  
+    // Llama a la función para consultar ubicación en tiempo real de un trufi
     function consultarRutaTrufi() {
       const rutaSeleccionada = document.getElementById("ruta2").value;
       consultarUbicacionTrufiDesdeFirebase(rutaSeleccionada);
@@ -159,11 +160,10 @@
         "120-vuelta": 10719035,
         "134": 9427978,
         "130":9715360,
-        
     };
 
+    // Obtiene la geometría (nodos) de una ruta desde Overpass API y la dibuja en el mapa
     function obtenerRuta(tipoRuta, moverTrufi) {
-  
       const idRuta = rutasDisponibles[tipoRuta];
 
       if (!idRuta) {
@@ -190,7 +190,7 @@
             console.error('No se encontró la relación.');
             return;
           }
-  
+          // Reconstruye la ruta a partir de los nodos
           ruta = [];
           relation.members.forEach(m => {
             if (m.type === 'way' && ways[m.ref]) {
@@ -201,19 +201,19 @@
                   let primero = wayNodes[0];
                   let ultimoWay = wayNodes[wayNodes.length - 1];
                   if (distance(ultimo, primero) > distance(ultimo, ultimoWay)) {
-                    wayNodes.reverse();
+                    wayNodes.reverse(); // Invierte la dirección si es necesario
                   }
                 }
                 ruta.push(...wayNodes);
               }
             }
           });
-  
+          // Elimina ruta anterior y dibuja nueva ruta en el mapa
           if (ultimaCapa) map.removeLayer(ultimaCapa);
           ultimaCapa = L.layerGroup();
           const polyline = L.polyline(ruta, { color: 'red', weight: 4 }).addTo(ultimaCapa);
           ruta.forEach(p => {
-            L.circleMarker(p, { radius: 2, color: 'red', fillColor: 'red', fillOpacity: 1 }).addTo(ultimaCapa);
+            L.circleMarker(p, { radius: 1, color: 'red', fillColor: 'red', fillOpacity: 1 }).addTo(ultimaCapa);
           });
   
           ultimaCapa.addTo(map);
@@ -223,7 +223,8 @@
           console.error('Error al obtener la ruta:', error);
         });
     }
-  
+
+    // Calcula la distancia entre dos puntos usando diferencia de latitudes/longitudes (simple)
     function distance(p1, p2) {
       const latDiff = p1[0] - p2[0];
       const lonDiff = p1[1] - p2[1];
@@ -242,7 +243,8 @@ function calcularDistancia(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
-  
+
+  // Verifica si la ubicación del usuario está dentro de un umbral de metros cerca de la ruta
   function estaCercaDeRuta(userPosition, ruta, umbralMetros = 300) {
     let cerca = false;
     
@@ -257,29 +259,28 @@ function calcularDistancia(lat1, lon1, lat2, lon2) {
             break;  // Si ya encontramos uno cercano, no necesitamos seguir buscando
         }
     }
-
     return cerca;
 }
 let referenciaAnterior = null;
-
+// Consulta en tiempo real la ubicación del trufi desde Firebase y lo muestra en el mapa
 function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
-    // Desactiva escucha previa
+    // Desactiva cualquier escucha anterior, para evitar duplicaciones
     if (referenciaAnterior) {
       referenciaAnterior.off("value");
     }
   
-    // 1) Carga la/s ruta/s en el mapa
+    // 1) Carga las rutas en el mapa
     const rutasAsociadas = obtenerRutasAsociadas(nombreRutaSeleccionada);
     rutasAsociadas.forEach(r => obtenerRuta(r, false));
   
-    // 2) Espera a que la ruta esté lista
+    // 2) Espera a que la ruta esté lista antes de buscar la ubicacion del usuario
     const esperarRuta = setInterval(() => {
       if (!ruta || ruta.length === 0) return;
       clearInterval(esperarRuta);
   
-      // 3) Lee todos los conductores de esta línea
+      // 3) Lee todos los conductores de esta línea desde la firebase
       referenciaAnterior = db.ref(`ubicaciones_conductores/${nombreRutaSeleccionada}`);
-      referenciaAnterior.once("value", snapshot => {
+      referenciaAnterior.on("value", snapshot => {
         const todos = snapshot.val();
         if (!todos) {
           alert("No hay datos en esa línea.");
@@ -329,7 +330,7 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
           .openPopup();
         map.setView([lat, lng], 15);
   
-        // 7) Actualiza la UI
+        // 7) Actualiza la UI la interfaz del usuario
         document.getElementById("infoConductor").textContent = `Conductor: ${nombreConductor}`;
         document.getElementById("lineaConductor").textContent = `Línea: ${nombreRutaSeleccionada}`;
         document.getElementById("ubicacionTrufi").textContent = `(${lat.toFixed(6)}, ${lng.toFixed(6)})`;
@@ -357,7 +358,7 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         document.getElementById("cercaRuta").textContent =
           cerca ? "✅ Estás cerca de la ruta." : "⚠️ No estás cerca de la ruta.";
       });
-    }, 500);
+    }, 5000);
   }
   
   function obtenerRutasAsociadas(nombreRuta) {
