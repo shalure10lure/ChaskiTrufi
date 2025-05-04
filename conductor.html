@@ -133,21 +133,21 @@
         map.setView([lat, lng], 15);
     }
 
-        function iniciarActualizacionContinua() {
-            if (navigator.geolocation) {
-                setInterval(() => {
-                    navigator.geolocation.getCurrentPosition(
-                        actualizarUbicacion,
-                        error => console.error('Error al obtener ubicación:', error),
-                        { enableHighAccuracy: true }
-                    );
-                }, 5000);
-            } else {
-                alert('Geolocalización no soportada por este navegador.');
-            }
+    function iniciarActualizacionCada5Segundos() {
+        if (navigator.geolocation) {
+            setInterval(() => {
+                navigator.geolocation.getCurrentPosition(
+                    actualizarUbicacion,
+                    error => console.error('Error al obtener ubicación:', error),
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            }, 5000); // cada 5 segundos
+        } else {
+            alert('Geolocalización no soportada por este navegador.');
         }
-
-        iniciarActualizacionContinua();
+    }
+    iniciarActualizacionCada5Segundos();
     </script>
 </body>
 </html>
+
