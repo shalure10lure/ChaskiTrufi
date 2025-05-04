@@ -136,6 +136,7 @@
     // Limpia el mapa y vuelve a la pantalla de inicio
     function volverInicio() {
       clearInterval(intervaloMovimiento);
+      if (marker) map.removeLayer(marker);
       if (trufiMarker) map.removeLayer(trufiMarker);
       if (ultimaCapa) map.removeLayer(ultimaCapa);
   
@@ -145,9 +146,11 @@
     }
     // Llama a la función para consultar una ruta seleccionada por el usuario (sin ubicar trufi)
     function consultarRuta() {
+      if (marker) map.removeLayer(marker);
       const rutaSeleccionada = document.getElementById("ruta1").value;
       obtenerRuta(rutaSeleccionada, false);
     }
+  
     // Llama a la función para consultar ubicación en tiempo real de un trufi
     function consultarRutaTrufi() {
       const rutaSeleccionada = document.getElementById("ruta2").value;
@@ -261,6 +264,19 @@ function calcularDistancia(lat1, lon1, lat2, lon2) {
     }
     return cerca;
 }
+
+function limpiarUI(nombreLinea = '--') {
+  document.getElementById("infoConductor").textContent = `Conductor: --`;
+  document.getElementById("lineaConductor").textContent = `Línea: ${nombreLinea}`;
+  document.getElementById("ubicacionTrufi").textContent = `Ubicación del trufi: --`;
+  document.getElementById("velocidad").textContent = `Velocidad estimada: --`;
+  document.getElementById("actualizado").textContent = `Última actualización: --`;
+  document.getElementById("distancia").textContent = `Distancia: --`;
+  document.getElementById("miTiempoEstimado").textContent = `Mi tiempo estimado: --`;
+  document.getElementById("cercaRuta").textContent = `--`;
+}
+
+
 let referenciaAnterior = null;
 // Consulta en tiempo real la ubicación del trufi desde Firebase y lo muestra en el mapa
 function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
@@ -283,6 +299,11 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
       referenciaAnterior.on("value", snapshot => {
         const todos = snapshot.val();
         if (!todos) {
+          if (marker) {
+            map.removeLayer(marker);
+            marker = null;
+          }
+          limpiarUI(nombreRutaSeleccionada);
           alert("No hay datos en esa línea.");
           return;
         }
@@ -296,6 +317,11 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
           );
   
         if (recientes.length === 0) {
+          if (marker) {
+            map.removeLayer(marker);
+            marker = null;
+          }
+          limpiarUI(nombreRutaSeleccionada);
           alert("No hay conductores activos en los últimos 3 minutos.");
           return;
         }
@@ -342,11 +368,20 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
           document.getElementById("velocidad").textContent =
             `Velocidad estimada: ${velocidad ?? 40} km/h`;
   
-          const velMps = (velocidad ?? 40) * 1000 / 3600;
-          const tiempoSeg = distM / velMps;
-          const min = Math.floor(tiempoSeg / 60), seg = Math.floor(tiempoSeg % 60);
-          document.getElementById("miTiempoEstimado").textContent =
-            `Mi tiempo estimado: ${min} min ${seg} s`;
+            const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 40;
+            const velMps = velocidadUsada * 1000 / 3600;
+            
+            if (velMps > 0 && isFinite(distM)) {
+              const tiempoSeg = distM / velMps;
+              const min = Math.floor(tiempoSeg / 60);
+              const seg = Math.floor(tiempoSeg % 60);
+              document.getElementById("miTiempoEstimado").textContent =
+                `Mi tiempo estimado: ${min} min ${seg} s`;
+            } else {
+              document.getElementById("miTiempoEstimado").textContent =
+                `Mi tiempo estimado: --`;
+            }
+            
         }
   
         const f = new Date(timestamp);
