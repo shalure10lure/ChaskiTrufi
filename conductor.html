@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <title>ChaskiTrufi-Conductor</title>
     <link rel="icon" href="imagenes/CHASKITRUFIlog2.png">
+    <!-- Hoja de estilos de Leaflet para el mapa -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Librería JavaScript de Leaflet para mapas -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="conductor.css">
 </head>
@@ -13,16 +15,19 @@
         <img src="imagenes/CHASKITRUFI-logo1.png" alt="">
         <h2>CONDUCTOR</h2>
     </div>
+    <!-- Contenedor para mostrar información del conductor -->
     <div id="info"></div>
+
     <div id="panel">
         <h3>Estás compartiendo ubicación...</h3>
         <div id="map" style="height: 400px;"></div>
     </div>
 
     <script type="module">
+        // Importar módulos necesarios de Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
-
+        // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDe0SAUeg_DOhC2D1fIq2-ZZUhh4_yCSvk",
             authDomain: "chaskitrufi-72d1c.firebaseapp.com",
@@ -32,40 +37,40 @@
             messagingSenderId: "997912993962",
             appId: "1:997912993962:web:4937dcf165fcc35306f0d3"
         };
-
+        // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-
+        // Obtener datos del conductor desde el localStorage
         const conductor = JSON.parse(localStorage.getItem('conductorActual'));
-
+        // Si no hay datos, redirige al login
         if (!conductor) {
             alert('Datos del conductor no encontrados. Inicie sesión correctamente.');
             window.location.href = 'index.html';
         }
-
+        // Mostrar nombre y línea del conductor en la página
         document.getElementById('info').innerHTML = `
             <p><strong>Nombre:</strong> ${conductor.nombre} ${conductor.apellido}<br>
             <strong>Línea:</strong> ${conductor.nombre_linea}</p>
         `;
-
+        // Inicializar el mapa en Cochabamba (coordenadas aproximadas)
         let map = L.map('map').setView([-17.3926, -66.1569], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
-
+       // Definir icono personalizado para el trufi 
         const iconoAuto = L.icon({
             iconUrl: 'imagenes/auto.png',
             iconSize: [40, 40],
             iconAnchor: [20, 40],
             popupAnchor: [0, -40]
         });
-
+        // Variables para el marcador, ubicación anterior y velocidad
         let trufiMarker = null;
         let lastLocation = null;  // Para almacenar la última ubicación
         let lastTimestamp = null; // Para almacenar el último timestamp
+        let ultimaVelocidad = null; // Nueva variable para mostrar en el mapa
 
-        
-
+  // Función para calcular la distancia entre dos puntos (fórmula Haversine)
     function calcularDistancia(lat1, lon1, lat2, lon2) {
         const R = 6371; // Radio de la Tierra en km
         const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -78,12 +83,12 @@
         return distancia;
     }
 
-   
+   // Función para calcular velocidad: distancia/tiempo (convertido a horas)
     function calcularVelocidad(distancia, tiempo) {
         const velocidad = distancia / (tiempo / 3600); // Velocidad en km/h
         return velocidad;
     }
-
+    // Función que se ejecuta cuando se actualiza la posición del GPS
     function actualizarUbicacion(position) {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
@@ -92,12 +97,21 @@
         const linea = conductor.nombre_linea;
         const id = `${conductor.nombre}_${linea}`;
 
+        const nuevaUbicacion = { lat: lat, lng: lng };
+        const MIN_DISTANCIA_KM = 0.005; // 5 metros
+
         // Si ya tenemos una ubicación anterior, calculamos la velocidad
         if (lastLocation && lastTimestamp) {
             const distancia = calcularDistancia(lastLocation.lat, lastLocation.lng, lat, lng);
             const tiempo = (timestamp - lastTimestamp) / 1000; // Tiempo en segundos
+            if (distancia < MIN_DISTANCIA_KM) {
+                console.log(`No se actualiza: distancia mínima no superada (${distancia.toFixed(4)} km)`);
+                return; // No actualiza si no se ha movido lo suficiente
+            }
+    
             const velocidad = calcularVelocidad(distancia, tiempo);
-
+            ultimaVelocidad = velocidad;
+            // Guardar ubicación y velocidad en Firebase
             const data = {
                 lat: lat,
                 lng: lng,
@@ -120,34 +134,51 @@
                 .then(() => console.log('Ubicación guardada'))
                 .catch((error) => console.error('Error al guardar ubicación:', error));
         }
-
+        // Actualizar últimas coordenadas y tiempo
         lastLocation = { lat: lat, lng: lng }; // Guardamos la ubicación actual como la última
         lastTimestamp = timestamp; // Guardamos el timestamp actual como el último
-
-        if (trufiMarker) {
-            trufiMarker.setLatLng([lat, lng]);
-        } else {
-            trufiMarker = L.marker([lat, lng], { icon: iconoAuto }).addTo(map).bindPopup('Mi ubicación actual');
-        }
-
+        // Mostrar velocidad en popup del mapa
+        const popupTexto = ultimaVelocidad
+        ? `Velocidad: ${ultimaVelocidad.toFixed(2)} km/h`
+        : 'Obteniendo velocidad...';
+    
+    if (trufiMarker) {
+        trufiMarker.setLatLng([lat, lng]);
+        trufiMarker.setPopupContent(popupTexto).openPopup();
+    } else {
+        trufiMarker = L.marker([lat, lng], { icon: iconoAuto })
+            .addTo(map)
+            .bindPopup(popupTexto)
+            .openPopup();
+    }
+    // Centrar el mapa en la ubicación actual
         map.setView([lat, lng], 15);
     }
 
-    function iniciarActualizacionCada5Segundos() {
+    let watchId = null;
+    // Activar geolocalización en tiempo real
+    function iniciarActualizacionConWatch() {
         if (navigator.geolocation) {
-            setInterval(() => {
-                navigator.geolocation.getCurrentPosition(
-                    actualizarUbicacion,
-                    error => console.error('Error al obtener ubicación:', error),
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                );
-            }, 5000); // cada 5 segundos
+            if (watchId !== null) return; // Ya está activo
+    
+            watchId = navigator.geolocation.watchPosition(
+                actualizarUbicacion,
+                error => console.error('Error al obtener ubicación:', error),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+            );
         } else {
             alert('Geolocalización no soportada por este navegador.');
         }
     }
-    iniciarActualizacionCada5Segundos();
+    // Función opcional para detener el seguimiento si en algún momento deseas hacerlo
+    function detenerActualizacion() {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+    }
+    // Iniciar seguimiento de ubicación al cargar la página
+    iniciarActualizacionConWatch();
     </script>
 </body>
 </html>
-
