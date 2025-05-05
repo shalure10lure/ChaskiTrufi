@@ -83,7 +83,6 @@
   
     let map, userMarker, trufiMarker, ruta ;
     let intervaloMovimiento, indexRuta = 0, ultimaCapa = null;
-    
     let marker = null;
     let userPosition = null;
      
@@ -110,17 +109,32 @@
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(position => {
           userPosition = [position.coords.latitude, position.coords.longitude];
-          userMarker = L.marker(userPosition, { icon: personIcon })
-          .addTo(map)
-          .bindPopup('Tú estás aquí')
-          .openPopup();
-         }, error => {
-          console.error('No se pudo obtener tu ubicación:', error);
-        });
+          userMarker = L.marker(userPosition, { icon: personIcon }) .addTo(map) .bindPopup('Tú estás aquí') .openPopup();
+         }, 
+         error => mostrarMensajeError(error)
+         );
       } else {
-        console.error('Geolocalización no disponible.');
+        console.error('Geolocalización no disponible en este navegador');
       }
     }
+
+
+function mostrarMensajeError(error) {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      alert("Permiso de geolocalización denegado. Activa la ubicación para ver tu posición.");
+      break;
+    case error.POSITION_UNAVAILABLE:
+      alert("La información de ubicación no está disponible.");
+      break;
+    case error.TIMEOUT:
+      alert("La solicitud para obtener la ubicación ha expirado.");
+      break;
+    default:
+      alert("Error desconocido al obtener la ubicación.");
+      break;
+  }
+}
     // Muestra u oculta secciones según el tipo seleccionado por el usuario (rutas o ubicación)
     function seleccionarTipo(tipo) {
       document.getElementById('seccion1').style.display = 'none';
@@ -129,6 +143,8 @@
   
       if (tipo === 'rutas') {
         document.getElementById('secrutas').style.display = 'block';
+        if (marker) map.removeLayer(marker);
+        limpiarUI();  // Limpia la UI de la ubicación del conductor
       } else if (tipo === 'ubicaciontrufi') {
         document.getElementById('secubicar').style.display = 'block';
       }
@@ -136,14 +152,23 @@
     // Limpia el mapa y vuelve a la pantalla de inicio
     function volverInicio() {
       clearInterval(intervaloMovimiento);
-      if (marker) map.removeLayer(marker);
-      if (trufiMarker) map.removeLayer(trufiMarker);
-      if (ultimaCapa) map.removeLayer(ultimaCapa);
-  
+      limpiarMapa();
       document.getElementById('seccion1').style.display = 'block';
       document.getElementById('secrutas').style.display = 'none';
       document.getElementById('secubicar').style.display = 'none';
     }
+    function limpiarMapa() {
+      if (marker) map.removeLayer(marker);
+      if (trufiMarker) map.removeLayer(trufiMarker);
+      if (ultimaCapa) map.removeLayer(ultimaCapa);
+    }
+    //tendra todas las rutas del trufi
+    const rutasDisponibles = {
+      "120-ida": 10719025,
+      "120-vuelta": 10719035,
+      "134": 9427978,
+      "130":9715360,
+  };
     // Llama a la función para consultar una ruta seleccionada por el usuario (sin ubicar trufi)
     function consultarRuta() {
       if (marker) map.removeLayer(marker);
@@ -156,15 +181,6 @@
       const rutaSeleccionada = document.getElementById("ruta2").value;
       consultarUbicacionTrufiDesdeFirebase(rutaSeleccionada);
     }
-
-    //tendra todas las rutas del trufi
-    const rutasDisponibles = {
-        "120-ida": 10719025,
-        "120-vuelta": 10719035,
-        "134": 9427978,
-        "130":9715360,
-    };
-
     // Obtiene la geometría (nodos) de una ruta desde Overpass API y la dibuja en el mapa
     function obtenerRuta(tipoRuta, moverTrufi) {
       const idRuta = rutasDisponibles[tipoRuta];
@@ -173,58 +189,45 @@
         alert("Ruta no disponible.");
         return;
       }
-  
       const consulta = `[out:json]; relation(${idRuta}); (._; >;); out body;`;
       const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(consulta);
   
       fetch(url)
-        .then(response => response.json())
-        .then(data => {
-          const nodos = {}, ways = {};
-          let relation = null;
-  
-          data.elements.forEach(e => {
-            if (e.type === 'node') nodos[e.id] = [e.lat, e.lon];
-            if (e.type === 'way') ways[e.id] = e;
-            if (e.type === 'relation') relation = e;
-          });
-  
-          if (!relation) {
-            console.error('No se encontró la relación.');
-            return;
+      .then(res => res.json())
+      .then(data => procesarDatosRuta(data))
+      .catch(err => console.error('Error al obtener la ruta:', err));
+    }
+
+    function procesarDatosRuta(data) {
+      const nodos = {}, ways = {};
+      let relation = null;
+    
+      data.elements.forEach(e => {
+        if (e.type === 'node') nodos[e.id] = [e.lat, e.lon];
+        if (e.type === 'way') ways[e.id] = e;
+        if (e.type === 'relation') relation = e;
+      });
+    
+      if (!relation) return console.error('Relación no encontrada');
+    
+      ruta = [];
+      relation.members.forEach(m => {
+        if (m.type === 'way' && ways[m.ref]) {
+          let wayNodes = ways[m.ref].nodes.map(id => nodos[id]).filter(Boolean);
+          if (ruta.length > 0 && distance(ruta[ruta.length - 1], wayNodes[0]) > distance(ruta[ruta.length - 1], wayNodes[wayNodes.length - 1])) {
+            wayNodes.reverse();
           }
-          // Reconstruye la ruta a partir de los nodos
-          ruta = [];
-          relation.members.forEach(m => {
-            if (m.type === 'way' && ways[m.ref]) {
-              let wayNodes = ways[m.ref].nodes.map(id => nodos[id]).filter(Boolean);
-              if (wayNodes.length > 0) {
-                if (ruta.length > 0) {
-                  let ultimo = ruta[ruta.length - 1];
-                  let primero = wayNodes[0];
-                  let ultimoWay = wayNodes[wayNodes.length - 1];
-                  if (distance(ultimo, primero) > distance(ultimo, ultimoWay)) {
-                    wayNodes.reverse(); // Invierte la dirección si es necesario
-                  }
-                }
-                ruta.push(...wayNodes);
-              }
-            }
-          });
-          // Elimina ruta anterior y dibuja nueva ruta en el mapa
-          if (ultimaCapa) map.removeLayer(ultimaCapa);
-          ultimaCapa = L.layerGroup();
-          const polyline = L.polyline(ruta, { color: 'red', weight: 4 }).addTo(ultimaCapa);
-          ruta.forEach(p => {
-            L.circleMarker(p, { radius: 1, color: 'red', fillColor: 'red', fillOpacity: 1 }).addTo(ultimaCapa);
-          });
-  
-          ultimaCapa.addTo(map);
-          map.fitBounds(polyline.getBounds());
-        })
-        .catch(error => {
-          console.error('Error al obtener la ruta:', error);
-        });
+          ruta.push(...wayNodes);
+        }
+      });
+    
+      if (ultimaCapa) map.removeLayer(ultimaCapa);
+      ultimaCapa = L.layerGroup();
+      const polyline = L.polyline(ruta, { color: 'cyan', weight: 4 }).addTo(ultimaCapa);
+      ruta.forEach(p => L.circleMarker(p, { radius: 1, color: 'cyan', fillOpacity: 1 }).addTo(ultimaCapa));
+    
+      ultimaCapa.addTo(map);
+      map.fitBounds(polyline.getBounds());
     }
 
     // Calcula la distancia entre dos puntos usando diferencia de latitudes/longitudes (simple)
@@ -264,6 +267,38 @@ function calcularDistancia(lat1, lon1, lat2, lon2) {
     }
     return cerca;
 }
+/**
+ * Encuentra el índice del nodo en `ruta` más cercano a `punto` ([lat, lon])
+ */
+ function encontrarNodoMasCercano(punto, ruta) {
+  let minDist = Infinity;
+  let mejorIdx = 0;
+  for (let i = 0; i < ruta.length; i++) {
+    const d = calcularDistancia(punto[0], punto[1], ruta[i][0], ruta[i][1]);
+    if (d < minDist) {
+      minDist = d;
+      mejorIdx = i;
+    }
+  }
+  return mejorIdx;
+}
+
+/**
+ * Suma la distancia geodésica (Haversine) entre nodos consecutivos
+ * desde iInicio hasta iFin (inclusive start, exclusive end).
+ */
+function calcularDistanciaRuta(ruta, iInicio, iFin) {
+  let dist = 0;
+  if (iInicio > iFin) [iInicio, iFin] = [iFin, iInicio];
+  for (let i = iInicio; i < iFin; i++) {
+    dist += calcularDistancia(
+      ruta[i][0], ruta[i][1],
+      ruta[i+1][0], ruta[i+1][1]
+    );
+  }
+  return dist;  // en metros
+}
+
 
 function limpiarUI(nombreLinea = '--') {
   document.getElementById("infoConductor").textContent = `Conductor: --`;
@@ -275,6 +310,7 @@ function limpiarUI(nombreLinea = '--') {
   document.getElementById("miTiempoEstimado").textContent = `Mi tiempo estimado: --`;
   document.getElementById("cercaRuta").textContent = `--`;
 }
+
 
 
 let referenciaAnterior = null;
@@ -362,27 +398,31 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         document.getElementById("ubicacionTrufi").textContent = `(${lat.toFixed(6)}, ${lng.toFixed(6)})`;
   
         if (userPosition) {
-          const distM = calcularDistancia(userPosition[0], userPosition[1], lat, lng);
+          // → en lugar de línea recta, calculamos por ruta:
+          const idxTrufi    = encontrarNodoMasCercano([lat, lng], ruta);
+          const idxUsuario = encontrarNodoMasCercano(userPosition, ruta);
+          const distM      = calcularDistanciaRuta(ruta, idxTrufi, idxUsuario);
+        
           const distKm = (distM / 1000).toFixed(2);
           document.getElementById("distancia").textContent = `Distancia: ${distKm} km`;
           document.getElementById("velocidad").textContent =
             `Velocidad estimada: ${velocidad ?? 40} km/h`;
-  
-            const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 40;
-            const velMps = velocidadUsada * 1000 / 3600;
-            
-            if (velMps > 0 && isFinite(distM)) {
-              const tiempoSeg = distM / velMps;
-              const min = Math.floor(tiempoSeg / 60);
-              const seg = Math.floor(tiempoSeg % 60);
-              document.getElementById("miTiempoEstimado").textContent =
-                `Mi tiempo estimado: ${min} min ${seg} s`;
-            } else {
-              document.getElementById("miTiempoEstimado").textContent =
-                `Mi tiempo estimado: --`;
-            }
-            
+        
+          const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 40;
+          const velMps = velocidadUsada * 1000 / 3600;
+        
+          if (velMps > 0 && isFinite(distM)) {
+            const tiempoSeg = distM / velMps;
+            const min = Math.floor(tiempoSeg / 60);
+            const seg = Math.floor(tiempoSeg % 60);
+            document.getElementById("miTiempoEstimado").textContent =
+              `Mi tiempo estimado: ${min} min ${seg} s`;
+          } else {
+            document.getElementById("miTiempoEstimado").textContent =
+              `Mi tiempo estimado: --`;
+          }
         }
+        
   
         const f = new Date(timestamp);
         document.getElementById("actualizado").textContent =
