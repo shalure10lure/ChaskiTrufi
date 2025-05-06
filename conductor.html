@@ -8,7 +8,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Librería JavaScript de Leaflet para mapas -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- SweetAlert2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="conductor.css">
+
 </head>
 <body>
     <div id="inicio">
@@ -44,8 +47,15 @@
         const conductor = JSON.parse(localStorage.getItem('conductorActual'));
         // Si no hay datos, redirige al login
         if (!conductor) {
-            alert('Datos del conductor no encontrados. Inicie sesión correctamente.');
-            window.location.href = 'index.html';
+            Swal.fire({
+                icon: 'error',
+                title: '¡Error!',
+                text: 'Datos del conductor no encontrados. Inicie sesión correctamente.',
+                confirmButtonText: 'Aceptar'
+            }).then(() => {
+                window.location.href = 'index.html';
+            });
+            
         }
         // Mostrar nombre y línea del conductor en la página
         document.getElementById('info').innerHTML = `
@@ -88,6 +98,25 @@
         const velocidad = distancia / (tiempo / 3600); // Velocidad en km/h
         return velocidad;
     }
+
+    // 🔄 Función para mover el marcador suavemente
+    function animarMovimiento(marker, nuevaLatLng, duracion = 1000) {
+        const inicio = performance.now();
+        const inicioLatLng = marker.getLatLng();
+        const deltaLat = nuevaLatLng.lat - inicioLatLng.lat;
+        const deltaLng = nuevaLatLng.lng - inicioLatLng.lng;
+
+        function animar(timestamp) {
+            const progreso = Math.min((timestamp - inicio) / duracion, 1);
+            const lat = inicioLatLng.lat + deltaLat * progreso;
+            const lng = inicioLatLng.lng + deltaLng * progreso;
+            marker.setLatLng([lat, lng]);
+            if (progreso < 1) requestAnimationFrame(animar);
+        }
+
+        requestAnimationFrame(animar);
+    }
+
     // Función que se ejecuta cuando se actualiza la posición del GPS
     function actualizarUbicacion(position) {
         const lat = position.coords.latitude;
@@ -96,7 +125,6 @@
 
         const linea = conductor.nombre_linea;
         const id = `${conductor.nombre}_${linea}`;
-
         const nuevaUbicacion = { lat: lat, lng: lng };
         const MIN_DISTANCIA_KM = 0.005; // 5 metros
 
@@ -112,23 +140,14 @@
             const velocidad = calcularVelocidad(distancia, tiempo);
             ultimaVelocidad = velocidad;
             // Guardar ubicación y velocidad en Firebase
-            const data = {
-                lat: lat,
-                lng: lng,
-                timestamp: timestamp,
-                velocidad: velocidad // Guardamos la velocidad
-            };
+            const data = { lat: lat,lng: lng,timestamp: timestamp,velocidad: velocidad };// Guardamos la velocidad 
 
             set(ref(db, 'ubicaciones_conductores/' + linea + '/' + id), data)
                 .then(() => console.log('Ubicación y velocidad guardadas'))
                 .catch((error) => console.error('Error al guardar ubicación y velocidad:', error));
         } else {
             // Si no tenemos una ubicación anterior, solo guardamos la ubicación
-            const data = {
-                lat: lat,
-                lng: lng,
-                timestamp: timestamp
-            };
+            const data = { lat: lat, lng: lng, timestamp: timestamp};
 
             set(ref(db, 'ubicaciones_conductores/' + linea + '/' + id), data)
                 .then(() => console.log('Ubicación guardada'))
@@ -143,7 +162,7 @@
         : 'Obteniendo velocidad...';
     
     if (trufiMarker) {
-        trufiMarker.setLatLng([lat, lng]);
+        animarMovimiento(trufiMarker, { lat, lng }); // ✅ Movimiento suave
         trufiMarker.setPopupContent(popupTexto).openPopup();
     } else {
         trufiMarker = L.marker([lat, lng], { icon: iconoAuto })
@@ -151,8 +170,7 @@
             .bindPopup(popupTexto)
             .openPopup();
     }
-    // Centrar el mapa en la ubicación actual
-        map.setView([lat, lng], 15);
+    map.panTo([lat, lng], { animate: true, duration: 1 }); // ✅ Mapa se mueve suavemente
     }
 
     let watchId = null;
@@ -160,16 +178,22 @@
     function iniciarActualizacionConWatch() {
         if (navigator.geolocation) {
             if (watchId !== null) return; // Ya está activo
-    
             watchId = navigator.geolocation.watchPosition(
                 actualizarUbicacion,
                 error => console.error('Error al obtener ubicación:', error),
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
             );
         } else {
-            alert('Geolocalización no soportada por este navegador.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Geolocalización no disponible',
+                text: 'Este navegador no soporta geolocalización.',
+                confirmButtonText: 'OK'
+            });
+            
         }
     }
+    
     // Función opcional para detener el seguimiento si en algún momento deseas hacerlo
     function detenerActualizacion() {
         if (watchId !== null) {
@@ -179,6 +203,7 @@
     }
     // Iniciar seguimiento de ubicación al cargar la página
     iniciarActualizacionConWatch();
+
     </script>
 </body>
 </html>
