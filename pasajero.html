@@ -11,6 +11,9 @@
   <!-- Firebase compat (sin módulos) -->
   <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-database-compat.js"></script>
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
   <link rel="stylesheet" href="pasajero.css">
 </head>
 <body>
@@ -118,23 +121,31 @@
       }
     }
 
-
-function mostrarMensajeError(error) {
-  switch (error.code) {
-    case error.PERMISSION_DENIED:
-      alert("Permiso de geolocalización denegado. Activa la ubicación para ver tu posición.");
-      break;
-    case error.POSITION_UNAVAILABLE:
-      alert("La información de ubicación no está disponible.");
-      break;
-    case error.TIMEOUT:
-      alert("La solicitud para obtener la ubicación ha expirado.");
-      break;
-    default:
-      alert("Error desconocido al obtener la ubicación.");
-      break;
-  }
-}
+    function mostrarMensajeError(error) {
+      let mensaje = "";
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          mensaje = "Permiso de geolocalización denegado. Activa la ubicación para ver tu posición.";
+          break;
+        case error.POSITION_UNAVAILABLE:
+          mensaje = "La información de ubicación no está disponible.";
+          break;
+        case error.TIMEOUT:
+          mensaje = "La solicitud para obtener la ubicación ha expirado.";
+          break;
+        default:
+          mensaje = "Error desconocido al obtener la ubicación.";
+          break;
+      }
+    
+      Swal.fire({
+        icon: 'error',
+        title: 'Error de ubicación',
+        text: mensaje,
+        confirmButtonText: 'Entendido'
+      });
+    }
+    
     // Muestra u oculta secciones según el tipo seleccionado por el usuario (rutas o ubicación)
     function seleccionarTipo(tipo) {
       document.getElementById('seccion1').style.display = 'none';
@@ -186,9 +197,15 @@ function mostrarMensajeError(error) {
       const idRuta = rutasDisponibles[tipoRuta];
 
       if (!idRuta) {
-        alert("Ruta no disponible.");
+        Swal.fire({
+          icon: 'warning',
+          title: 'Ruta no disponible',
+          text: 'La ruta seleccionada no está disponible en el sistema.',
+          confirmButtonText: 'Ok'
+        });
         return;
       }
+      
       const consulta = `[out:json]; relation(${idRuta}); (._; >;); out body;`;
       const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(consulta);
   
@@ -340,7 +357,12 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
             marker = null;
           }
           limpiarUI(nombreRutaSeleccionada);
-          alert("No hay datos en esa línea.");
+          Swal.fire({
+            icon: 'info',
+            title: 'Sin datos disponibles',
+            text: 'No hay datos en esa línea.',
+            confirmButtonText: 'Ok'
+          });
           return;
         }
   
@@ -358,8 +380,13 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
             marker = null;
           }
           limpiarUI(nombreRutaSeleccionada);
-          alert("No hay conductores activos en los últimos 3 minutos.");
-          return;
+          Swal.fire({
+            icon: 'info',
+            title: 'Sin conductores activos',
+            text: 'No hay conductores activos en los últimos 3 minutos.',
+            confirmButtonText: 'Ok'
+          });
+          return;          
         }
   
         // 5) Si sólo hay uno, lo tomamos; si hay varios, elegimos el más cercano
