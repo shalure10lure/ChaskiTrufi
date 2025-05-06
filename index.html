@@ -6,6 +6,10 @@
   <title>ChaskiTrufi</title>
   <link rel="stylesheet" href="index.css">
   <link rel="icon" href="imagenes/CHASKITRUFIlog2.png">
+
+  <!-- SweetAlert2 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 </head>
 <body>
   <!-- SECCION I N I C I O -->
@@ -34,7 +38,7 @@
 
     <div id="extras-conductor" style="display: none;">
       <input type="text" id="codigo_linea" placeholder="Código de Línea"><br><br>
-      <input type="text" id="nombre_linea" placeholder="Nombre de Línea"><br><br>
+      <input type="text" id="nombre_linea" placeholder="Numero de Línea"><br><br>
     </div>
 
     <button onclick="registrarse()">Registrarse</button>
@@ -93,65 +97,111 @@
       const confirmar = document.getElementById('confirmar_contrasena').value;
 
       if (!nombre || !apellido || !contrasena || !confirmar) {
-        alert('Completa todos los campos.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Campos incompletos',
+          text: 'Por favor, completa todos los campos.',
+        });
         return;
       }
       if (contrasena !== confirmar) {
-        alert('Las contraseñas no coinciden.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Contraseñas no coinciden',
+          text: 'Las contraseñas no coinciden. Intenta nuevamente.',
+        });
         return;
       }
-
-      if (rolSeleccionado === 'pasajero') {
-        await set(ref(db, 'pasajeros/' + nombre), {
-          nombre,
-          apellido,
-          contrasena
-        });
-        alert('Registro exitoso como pasajero');
-        window.location.href = 'pasajero.html';
-      } else {
-        const codigo = document.getElementById('codigo_linea').value.trim();
-        const linea = document.getElementById('nombre_linea').value.trim();
-
-        const codigosValidos = {
-          "120": "120",
-          "112": "112",
-          "134": "134",
-          "130":"130"
-        };
-
-        if (!codigo || !linea) {
-          alert('Completa todos los campos del conductor.');
-          return;
+      try {
+        if (rolSeleccionado === 'pasajero') {
+          await set(ref(db, 'pasajeros/' + nombre), {
+            nombre,
+            apellido,
+            contrasena
+          });
+          Swal.fire({
+            icon: 'success',
+            title: 'Registro exitoso',
+            text: 'Ahora eres un pasajero de ChaskiTrufi',
+            showConfirmButton: true, // El botón "Aceptar" estará disponible
+            timer: 3000,  // El mensaje se cerrará automáticamente después de 3 segundos
+            timerProgressBar: true,  // Muestra una barra de progreso que indica el tiempo restante
+          }).then(() => {
+            // Después de que el mensaje se cierre, redirige al pasajero
+            window.location.href = 'pasajero.html';
+          });
+          
+        } else {
+          const codigo = document.getElementById('codigo_linea').value.trim();
+          const linea = document.getElementById('nombre_linea').value.trim();
+    
+          const codigosValidos = {
+            "120": "120",
+            "106": "106",
+            "134": "134",
+            "130":"130"
+          };
+    
+          if (!codigo || !linea) {
+            Swal.fire({
+              icon: 'error',
+              title: 'Campos incompletos',
+              text: 'Por favor, completa todos los campos del conductor.',
+            });
+            return;
+          }
+    
+          if (codigosValidos[linea] !== codigo) {
+            Swal.fire({
+              icon: 'error',
+              title: 'Código incorrecto',
+              text: 'Código de línea incorrecto para la línea ingresada.',
+            });
+            return;
+          }
+    
+          await set(ref(db, 'conductores/' + nombre), {
+            nombre,
+            apellido,
+            contrasena,
+            codigo_linea: codigo,
+            nombre_linea: linea
+          });
+    
+          // Guardar todos los datos del conductor en un solo objeto
+          const conductor = {
+            nombre,
+            apellido,
+            contrasena,
+            codigo_linea: codigo,
+            nombre_linea: linea
+          };
+    
+          // Guardar el objeto completo en localStorage
+          localStorage.setItem('conductorActual', JSON.stringify(conductor));
+    
+          Swal.fire({
+            icon: 'success',
+            title: 'Registro exitoso',
+            text: 'Ahora eres un conductor de ChaskiTrufi',
+            showConfirmButton: true, // El botón "Aceptar" estará disponible
+            timer: 3000,  // El mensaje se cerrará automáticamente después de 3 segundos
+            timerProgressBar: true,  // Muestra una barra de progreso que indica el tiempo restante
+          }).then(() => {
+            // Después de que el mensaje se cierre (ya sea por el usuario o automáticamente),
+            // redirige al conductor
+            window.location.href = 'conductor.html';
+          });
+          
         }
-
-        if (codigosValidos[linea] !== codigo) {
-          alert('Código de línea incorrecto para la línea ingresada.');
-          return;
-        }
-
-        await set(ref(db, 'conductores/' + nombre), {
-          nombre,
-          apellido,
-          contrasena,
-          codigo_linea: codigo,
-          nombre_linea: linea
+      } catch (error) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error al registrar',
+          text: 'Hubo un error al registrar, por favor intenta nuevamente.',
         });
-// Guardar todos los datos del conductor en un solo objeto
-const conductor = {
-  nombre,
-  apellido,
-  contrasena,
-  codigo_linea: codigo,
-  nombre_linea: linea
-};
-
-// Guardar el objeto completo en localStorage
-localStorage.setItem('conductorActual', JSON.stringify(conductor));
-
-alert('Registro exitoso como conductor');
-window.location.href = 'conductor.html';
-}
+        console.error('Error al registrar:', error);
+      }
 }
 
     window.iniciarSesion = async function() {
@@ -159,51 +209,95 @@ window.location.href = 'conductor.html';
       const contrasena = document.getElementById('login_contrasena').value;
 
       if (!nombre || !contrasena) {
-        alert('Completa los campos.');
+        Swal.fire({
+          icon: 'error',
+          title: 'Campos incompletos',
+          text: 'Por favor, completa los campos.',
+        });
         return;
       }
 
-      // Intentar buscar primero en conductores
-      let snapshot = await get(ref(db, 'conductores/' + nombre));
-      if (snapshot.exists()) {
-        const datos = snapshot.val();
-        if (datos.contrasena !== contrasena) {
-          alert('Contraseña incorrecta.');
+      try {
+        // Intentar buscar primero en conductores
+        let snapshot = await get(ref(db, 'conductores/' + nombre));
+        if (snapshot.exists()) {
+          const datos = snapshot.val();
+          if (datos.contrasena !== contrasena) {
+            Swal.fire({
+              icon: 'error',
+              title: 'Contraseña incorrecta',
+              text: 'La contraseña que ingresaste es incorrecta.',
+            });
+            return;
+          }
+    
+          // Guardar el objeto completo del conductor en localStorage
+          const conductor = {
+            nombre: datos.nombre,
+            apellido: datos.apellido,
+            contrasena: datos.contrasena,
+            codigo_linea: datos.codigo_linea,
+            nombre_linea: datos.nombre_linea
+          };
+    
+          localStorage.setItem('conductorActual', JSON.stringify(conductor));
+    
+          Swal.fire({
+            icon: 'success',
+            title: 'Inicio de sesión exitoso',
+            text: 'Bienvenido, conductor.',
+            showConfirmButton: true, // Permite que el usuario cierre el mensaje
+            timer: 3000,  // El mensaje se cierra automáticamente después de 3 segundos
+            timerProgressBar: true,  // Muestra una barra de progreso para indicar el tiempo restante
+          }).then(() => {
+            // Redirigir al conductor después de que el mensaje se cierre automáticamente
+            window.location.href = 'conductor.html';
+          });
           return;
         }
-// Guardar el objeto completo del conductor en localStorage
-const conductor = {
-  nombre: datos.nombre,
-  apellido: datos.apellido,
-  contrasena: datos.contrasena,
-  codigo_linea: datos.codigo_linea,
-  nombre_linea: datos.nombre_linea
-};
-
-localStorage.setItem('conductorActual', JSON.stringify(conductor));
-
-alert('Inicio de sesión exitoso (conductor).');
-window.location.href = 'conductor.html';
-return;
-}
-
-      // Si no es conductor, probar como pasajero
-      snapshot = await get(ref(db, 'pasajeros/' + nombre));
-      if (!snapshot.exists()) {
-        alert('Usuario no registrado.');
-        return;
+    
+        // Si no es conductor, probar como pasajero
+        snapshot = await get(ref(db, 'pasajeros/' + nombre));
+        if (!snapshot.exists()) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Usuario no registrado',
+            text: 'El usuario no está registrado. Verifica tus datos.',
+          });
+          return;
+        }
+    
+        const datos = snapshot.val();
+        if (datos.contrasena !== contrasena) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Contraseña incorrecta',
+            text: 'La contraseña que ingresaste es incorrecta.',
+          });
+          return;
+        }
+    
+        localStorage.setItem('rol', 'pasajero');
+    
+        Swal.fire({
+          icon: 'success',
+          title: 'Inicio de sesión exitoso',
+          text: 'Bienvenido, pasajero.',
+          showConfirmButton: true, // Permite que el usuario cierre el mensaje
+          timer: 3000,  // El mensaje se cierra automáticamente después de 3 segundos
+          timerProgressBar: true,  // Muestra una barra de progreso para indicar el tiempo restante
+        }).then(() => {
+          // Redirigir al usuario después de que el mensaje se cierre automáticamente
+          window.location.href = 'pasajero.html';
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error de inicio de sesión',
+          text: 'Hubo un error al intentar iniciar sesión. Inténtalo nuevamente.',
+        });
+        console.error('Error al iniciar sesión:', error);
       }
-
-      const datos = snapshot.val();
-      if (datos.contrasena !== contrasena) {
-        alert('Contraseña incorrecta.');
-        return;
-      }
-
-      localStorage.setItem('rol', 'pasajero');
-
-      alert('Inicio de sesión exitoso (pasajero).');
-      window.location.href = 'pasajero.html';
     }
   </script>
 </body>
