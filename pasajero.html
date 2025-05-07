@@ -60,6 +60,7 @@
     <p id="actualizado">Última actualización: --</p>
     <p id="miTiempoEstimado">Mi tiempo estimado de llegada: --</p>
     <p id="cercaRuta">--</p>
+    <p id="estadoTrufi"></p>
   </div>
   <button onclick="volverInicio()">Volver</button>
 </section>
@@ -186,7 +187,6 @@
       const rutaSeleccionada = document.getElementById("ruta1").value;
       obtenerRuta(rutaSeleccionada, false);
     }
-  
     // Llama a la función para consultar ubicación en tiempo real de un trufi
     function consultarRutaTrufi() {
       const rutaSeleccionada = document.getElementById("ruta2").value;
@@ -326,6 +326,25 @@ function limpiarUI(nombreLinea = '--') {
   document.getElementById("distancia").textContent = `Distancia: --`;
   document.getElementById("miTiempoEstimado").textContent = `Mi tiempo estimado: --`;
   document.getElementById("cercaRuta").textContent = `--`;
+  document.getElementById("estadoTrufi").textContent = `--`;
+}
+
+// 🔄 Función para mover el marcador suavemente
+function animarMovimiento(marker, nuevaLatLng, duracion = 1000) {
+  const inicio = performance.now();
+  const inicioLatLng = marker.getLatLng();
+  const deltaLat = nuevaLatLng.lat - inicioLatLng.lat;
+  const deltaLng = nuevaLatLng.lng - inicioLatLng.lng;
+
+  function animar(timestamp) {
+      const progreso = Math.min((timestamp - inicio) / duracion, 1);
+      const lat = inicioLatLng.lat + deltaLat * progreso;
+      const lng = inicioLatLng.lng + deltaLng * progreso;
+      marker.setLatLng([lat, lng]);
+      if (progreso < 1) requestAnimationFrame(animar);
+  }
+
+  requestAnimationFrame(animar);
 }
 
 
@@ -333,6 +352,11 @@ function limpiarUI(nombreLinea = '--') {
 let referenciaAnterior = null;
 // Consulta en tiempo real la ubicación del trufi desde Firebase y lo muestra en el mapa
 function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
+  // Estado de trufi parado
+  let trufiParado = false;
+  let ultimoTiempoEstimado = ''; // Último tiempo estimado antes de que se detuviera el trufi
+  const umbralVelocidad = 3;  // Umbral de velocidad (en km/h)
+
     // Desactiva cualquier escucha anterior, para evitar duplicaciones
     if (referenciaAnterior) {
       referenciaAnterior.off("value");
@@ -370,8 +394,7 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         const ahora = Date.now();
         const tresMin = 3 * 60 * 1000;
         const recientes = Object.entries(todos)
-          .filter(([id, d]) =>
-            d.timestamp && (ahora - d.timestamp) <= tresMin
+          .filter(([id, d]) => d.timestamp && (ahora - d.timestamp) <= tresMin
           );
   
         if (recientes.length === 0) {
@@ -411,13 +434,16 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         const [nombreConductor, datos] = elegido;
         const { lat, lng, timestamp, velocidad } = datos;
   
-        // 6) Muestra en el mapa
-        if (marker) map.removeLayer(marker);
-        marker = L.marker([lat, lng],{ icon: carIcon })
-          .addTo(map)
-          .bindPopup(`Conductor: ${nombreConductor}`)
-          .openPopup();
-        map.setView([lat, lng], 15);
+        // 6) Mueve el marcador suavemente
+      if (marker) {
+          animarMovimiento(marker, L.latLng(lat, lng)); // Mueve suavemente el marcador
+      } else {
+          marker = L.marker([lat, lng],{ icon: carIcon })
+              .addTo(map)
+              .bindPopup(`Conductor: ${nombreConductor}`)
+              .openPopup();
+      }
+      map.setView([lat, lng], 15);
   
         // 7) Actualiza la UI la interfaz del usuario
         document.getElementById("infoConductor").textContent = `Conductor: ${nombreConductor}`;
@@ -432,24 +458,38 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         
           const distKm = (distM / 1000).toFixed(2);
           document.getElementById("distancia").textContent = `Distancia: ${distKm} km`;
-          document.getElementById("velocidad").textContent =
-            `Velocidad estimada: ${velocidad ?? 40} km/h`;
-        
+          
           const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 40;
-          const velMps = velocidadUsada * 1000 / 3600;
-        
-          if (velMps > 0 && isFinite(distM)) {
-            const tiempoSeg = distM / velMps;
-            const min = Math.floor(tiempoSeg / 60);
-            const seg = Math.floor(tiempoSeg % 60);
-            document.getElementById("miTiempoEstimado").textContent =
-              `Mi tiempo estimado: ${min} min ${seg} s`;
-          } else {
-            document.getElementById("miTiempoEstimado").textContent =
-              `Mi tiempo estimado: --`;
-          }
-        }
-        
+          document.getElementById("velocidad").textContent =  `Velocidad estimada: ${velocidad ?? 40} km/h`;
+
+             // Verificar si el trufi está detenido
+  if (velocidadUsada < umbralVelocidad) {
+    trufiParado = true;
+    document.getElementById("estadoTrufi").textContent = `Estado: 🚏 El trufi está detenido.`;
+    
+    // Usar el último tiempo estimado si el trufi está detenido
+    document.getElementById("miTiempoEstimado").textContent = 
+      `Mi tiempo estimado: ${ultimoTiempoEstimado || '--'} (Trufi detenido)`;
+    
+  } else {
+    trufiParado = false;
+    document.getElementById("estadoTrufi").textContent = `Estado: 🟢 En movimiento`;
+    
+    const velMps = velocidadUsada * 1000 / 3600;
+
+    if (velMps > 0 && isFinite(distM)) {
+      const tiempoSeg = distM / velMps;
+      const min = Math.floor(tiempoSeg / 60);
+      const seg = Math.floor(tiempoSeg % 60);
+      
+      // Actualizar la estimación solo si el trufi está en movimiento
+      ultimoTiempoEstimado = `${min} min ${seg} s`;
+      document.getElementById("miTiempoEstimado").textContent = 
+        `Mi tiempo estimado: ${ultimoTiempoEstimado}`;
+    } else {
+      document.getElementById("miTiempoEstimado").textContent = `Mi tiempo estimado: --`;
+    }
+  }
   
         const f = new Date(timestamp);
         document.getElementById("actualizado").textContent =
@@ -459,7 +499,8 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
         const cerca = estaCercaDeRuta(userPosition, ruta);
         document.getElementById("cercaRuta").textContent =
           cerca ? "✅ Estás cerca de la ruta." : "⚠️ No estás cerca de la ruta.";
-      });
+        }
+        });
     }, 5000);
   }
   
