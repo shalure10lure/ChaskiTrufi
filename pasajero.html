@@ -459,7 +459,7 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
           const distKm = (distM / 1000).toFixed(2);
           document.getElementById("distancia").textContent = `Distancia: ${distKm} km`;
           
-          const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 0;
+          const velocidadUsada = velocidad && velocidad > 0 ? velocidad : 40;
           document.getElementById("velocidad").textContent =  `Velocidad estimada: ${velocidad ?? 40} km/h`;
 
              // Verificar si el trufi está detenido
