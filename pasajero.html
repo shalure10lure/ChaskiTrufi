@@ -355,7 +355,7 @@ function consultarUbicacionTrufiDesdeFirebase(nombreRutaSeleccionada) {
   // Estado de trufi parado
   let trufiParado = false;
   let ultimoTiempoEstimado = ''; // Último tiempo estimado antes de que se detuviera el trufi
-  const umbralVelocidad = 5;  // Umbral de velocidad (en km/h)
+  const umbralVelocidad = 10;  // Umbral de velocidad (en km/h)
 
     // Desactiva cualquier escucha anterior, para evitar duplicaciones
     if (referenciaAnterior) {
